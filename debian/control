@@ -1,0 +1,27 @@
+Source: hatchling
+Section: python
+Priority: optional
+Maintainer: Debian Python Team <team+python@tracker.debian.org>
+Uploaders: Stefano Rivera <stefanor@debian.org>
+Build-Depends:
+ debhelper-compat (= 13),
+ dh-sequence-python3,
+ pybuild-plugin-pyproject,
+ python3-all,
+ python3-pathspec,
+ python3-pluggy
+Standards-Version: 4.6.0
+Homepage: https://hatch.pypa.io/
+Vcs-Browser: https://salsa.debian.org/python-team/packages/hatchling
+Vcs-Git: https://salsa.debian.org/python-team/packages/hatchling.git
+Rules-Requires-Root: no
+
+Package: python3-hatchling
+Architecture: all
+Depends: ${misc:Depends}, ${python3:Depends}
+Recommends: ${python3:Recommends}
+Suggests: ${python3:Suggests}
+Description: Python package build backend used by Hatch
+ This is the extensible, standards compliant build backend used by Hatch.
+ .
+ It may be required to build a Python module from source.

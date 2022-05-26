@@ -1,0 +1,9 @@
+#! /usr/bin/make -f
+
+export PYBUILD_NAME=hatchling
+
+%:
+	dh $@ --buildsystem pybuild
+
+override_dh_auto_test:
+	# Currently the only tests build packages, we can't run these

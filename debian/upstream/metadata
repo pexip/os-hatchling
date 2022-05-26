@@ -1,0 +1,9 @@
+---
+Bug-Database: https://github.com/pypa/hatch/issues
+Bug-Submit: https://github.com/pypa/hatch/issues/new
+Documentation: https://hatch.pypa.io/
+Registry:
+  - Name: PyPI
+    Entry: hatchling
+Repository: https://github.com/pypa/hatch.git
+Repository-Browse: https://github.com/pypa/hatch/tree/master/backend
