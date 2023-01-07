@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import gzip
 import os
 import tarfile
@@ -6,26 +8,38 @@ from contextlib import closing
 from copy import copy
 from io import BytesIO
 from time import time as get_current_timestamp
+from typing import TYPE_CHECKING, Any, Callable
 
-from ..metadata.spec import DEFAULT_METADATA_VERSION, get_core_metadata_constructors
-from ..utils.constants import DEFAULT_BUILD_SCRIPT, DEFAULT_CONFIG_FILE
-from .config import BuilderConfig
-from .plugin.interface import BuilderInterface
-from .utils import get_reproducible_timestamp, normalize_archive_path, normalize_file_permissions, replace_file
+from hatchling.builders.config import BuilderConfig
+from hatchling.builders.plugin.interface import BuilderInterface
+from hatchling.builders.utils import (
+    get_reproducible_timestamp,
+    normalize_archive_path,
+    normalize_file_permissions,
+    normalize_relative_path,
+    replace_file,
+)
+from hatchling.metadata.spec import DEFAULT_METADATA_VERSION, get_core_metadata_constructors
+from hatchling.utils.constants import DEFAULT_BUILD_SCRIPT, DEFAULT_CONFIG_FILE
+
+if TYPE_CHECKING:
+    from types import TracebackType
 
 
 class SdistArchive:
-    def __init__(self, name, reproducible):
+    def __init__(self, name: str, *, reproducible: bool) -> None:
         """
         https://peps.python.org/pep-0517/#source-distributions
         """
         self.name = name
         self.reproducible = reproducible
 
+        timestamp: int | None
         if reproducible:
-            self.timestamp = get_reproducible_timestamp()
+            timestamp = get_reproducible_timestamp()
         else:
-            self.timestamp = None
+            timestamp = None
+        self.timestamp = timestamp
 
         raw_fd, self.path = tempfile.mkstemp(suffix='.tar.gz')
         self.fd = os.fdopen(raw_fd, 'w+b')
@@ -33,16 +47,20 @@ class SdistArchive:
         self.tf = tarfile.TarFile(fileobj=self.gz, mode='w', format=tarfile.PAX_FORMAT)
         self.gettarinfo = lambda *args, **kwargs: self.normalize_tar_metadata(self.tf.gettarinfo(*args, **kwargs))
 
-    def create_file(self, contents, *relative_paths):
-        contents = contents.encode('utf-8')
+    def create_file(self, contents: str | bytes, *relative_paths: str) -> None:
+        if not isinstance(contents, bytes):
+            contents = contents.encode('utf-8')
         tar_info = tarfile.TarInfo(normalize_archive_path(os.path.join(self.name, *relative_paths)))
-        tar_info.mtime = self.timestamp if self.reproducible else int(get_current_timestamp())
         tar_info.size = len(contents)
+        if self.reproducible and self.timestamp is not None:
+            tar_info.mtime = self.timestamp
+        else:
+            tar_info.mtime = int(get_current_timestamp())
 
         with closing(BytesIO(contents)) as buffer:
             self.tf.addfile(tar_info, buffer)
 
-    def normalize_tar_metadata(self, tar_info):
+    def normalize_tar_metadata(self, tar_info: tarfile.TarInfo) -> tarfile.TarInfo:
         if not self.reproducible:
             return tar_info
 
@@ -52,54 +70,76 @@ class SdistArchive:
         tar_info.uname = ''
         tar_info.gname = ''
         tar_info.mode = normalize_file_permissions(tar_info.mode)
-        tar_info.mtime = self.timestamp
+        if self.timestamp is not None:
+            tar_info.mtime = self.timestamp
 
         return tar_info
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         attr = getattr(self.tf, name)
         setattr(self, name, attr)
         return attr
 
-    def __enter__(self):
+    def __enter__(self) -> SdistArchive:
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(
+        self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: TracebackType | None
+    ) -> None:
         self.tf.close()
         self.gz.close()
         self.fd.close()
 
 
 class SdistBuilderConfig(BuilderConfig):
-    def __init__(self, *args, **kwargs):
-        super(SdistBuilderConfig, self).__init__(*args, **kwargs)
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
 
-        self.__core_metadata_constructor = None
-        self.__support_legacy = None
+        self.__core_metadata_constructor: Callable[..., str] | None = None
+        self.__strict_naming: bool | None = None
+        self.__support_legacy: bool | None = None
 
     @property
-    def core_metadata_constructor(self):
+    def core_metadata_constructor(self) -> Callable[..., str]:
         if self.__core_metadata_constructor is None:
             core_metadata_version = self.target_config.get('core-metadata-version', DEFAULT_METADATA_VERSION)
             if not isinstance(core_metadata_version, str):
-                raise TypeError(
-                    f'Field `tool.hatch.build.targets.{self.plugin_name}.core-metadata-version` must be a string'
-                )
+                message = f'Field `tool.hatch.build.targets.{self.plugin_name}.core-metadata-version` must be a string'
+                raise TypeError(message)
 
             constructors = get_core_metadata_constructors()
             if core_metadata_version not in constructors:
-                raise ValueError(
+                message = (
                     f'Unknown metadata version `{core_metadata_version}` for field '
                     f'`tool.hatch.build.targets.{self.plugin_name}.core-metadata-version`. '
                     f'Available: {", ".join(sorted(constructors))}'
                 )
+                raise ValueError(message)
 
             self.__core_metadata_constructor = constructors[core_metadata_version]
 
         return self.__core_metadata_constructor
 
     @property
-    def support_legacy(self):
+    def strict_naming(self) -> bool:
+        if self.__strict_naming is None:
+            if 'strict-naming' in self.target_config:
+                strict_naming = self.target_config['strict-naming']
+                if not isinstance(strict_naming, bool):
+                    message = f'Field `tool.hatch.build.targets.{self.plugin_name}.strict-naming` must be a boolean'
+                    raise TypeError(message)
+            else:
+                strict_naming = self.build_config.get('strict-naming', True)
+                if not isinstance(strict_naming, bool):
+                    message = 'Field `tool.hatch.build.strict-naming` must be a boolean'
+                    raise TypeError(message)
+
+            self.__strict_naming = strict_naming
+
+        return self.__strict_naming
+
+    @property
+    def support_legacy(self) -> bool:
         if self.__support_legacy is None:
             self.__support_legacy = bool(self.target_config.get('support-legacy', False))
 
@@ -113,21 +153,21 @@ class SdistBuilder(BuilderInterface):
 
     PLUGIN_NAME = 'sdist'
 
-    def get_version_api(self):
+    def get_version_api(self) -> dict[str, Callable]:
         return {'standard': self.build_standard}
 
-    def get_default_versions(self):
+    def get_default_versions(self) -> list[str]:
         return ['standard']
 
-    def clean(self, directory, versions):
+    def clean(self, directory: str, versions: list[str]) -> None:
         for filename in os.listdir(directory):
             if filename.endswith('.tar.gz'):
                 os.remove(os.path.join(directory, filename))
 
-    def build_standard(self, directory, **build_data):
+    def build_standard(self, directory: str, **build_data: Any) -> str:
         found_packages = set()
 
-        with SdistArchive(self.project_id, self.config.reproducible) as archive:
+        with SdistArchive(self.project_id, reproducible=self.config.reproducible) as archive:
             for included_file in self.recurse_included_files():
                 if self.config.support_legacy:
                     possible_package, file_name = os.path.split(included_file.relative_path)
@@ -157,12 +197,20 @@ class SdistBuilder(BuilderInterface):
                     'setup.py',
                 )
 
-        target = os.path.join(directory, f'{self.project_id}.tar.gz')
+        target = os.path.join(directory, f'{self.artifact_project_id}.tar.gz')
 
         replace_file(archive.path, target)
         return target
 
-    def construct_setup_py_file(self, packages, extra_dependencies=()):
+    @property
+    def artifact_project_id(self) -> str:
+        return (
+            self.project_id
+            if self.config.strict_naming
+            else f'{self.normalize_file_name_component(self.metadata.core.raw_name)}-{self.metadata.version}'
+        )
+
+    def construct_setup_py_file(self, packages: list[str], extra_dependencies: tuple[()] = ()) -> str:
         contents = '# -*- coding: utf-8 -*-\nfrom setuptools import setup\n\n'
 
         contents += 'setup(\n'
@@ -255,46 +303,50 @@ class SdistBuilder(BuilderInterface):
             contents += '    },\n'
 
         if packages:
+            src_layout = False
             contents += '    packages=[\n'
 
             for package in packages:
-                contents += f"        {package.replace(os.path.sep, '.')!r},\n"
+                if package.startswith(f'src{os.sep}'):
+                    src_layout = True
+                    contents += f"        {package.replace(os.sep, '.')[4:]!r},\n"
+                else:
+                    contents += f"        {package.replace(os.sep, '.')!r},\n"
 
             contents += '    ],\n'
+
+            if src_layout:
+                contents += "    package_dir={'': 'src'},\n"
 
         contents += ')\n'
 
         return contents
 
-    def get_default_build_data(self):
-        build_data = {'artifacts': [], 'force_include': {}, 'dependencies': []}
+    def get_default_build_data(self) -> dict[str, Any]:
+        force_include = {
+            os.path.join(self.root, 'pyproject.toml'): 'pyproject.toml',
+            os.path.join(self.root, DEFAULT_CONFIG_FILE): DEFAULT_CONFIG_FILE,
+            os.path.join(self.root, DEFAULT_BUILD_SCRIPT): DEFAULT_BUILD_SCRIPT,
+        }
+        build_data = {'force_include': force_include, 'dependencies': []}
 
         for exclusion_files in self.config.vcs_exclusion_files.values():
             for exclusion_file in exclusion_files:
-                build_data['force_include'][exclusion_file] = os.path.basename(exclusion_file)
-
-        # Check for inclusion first to avoid redundant pattern matching
-        if not self.config.include_path('pyproject.toml'):
-            build_data['artifacts'].append('/pyproject.toml')
+                force_include[exclusion_file] = os.path.basename(exclusion_file)
 
         readme_path = self.metadata.core.readme_path
-        if readme_path and not self.config.include_path(readme_path):
-            build_data['artifacts'].append(f'/{readme_path}')
+        if readme_path:
+            readme_path = normalize_relative_path(readme_path)
+            force_include[os.path.join(self.root, readme_path)] = readme_path
 
         license_files = self.metadata.core.license_files
         if license_files:
             for license_file in license_files:
-                if not self.config.include_path(license_file):
-                    build_data['artifacts'].append(f'/{license_file}')
-
-        if not self.config.include_path(DEFAULT_BUILD_SCRIPT):
-            build_data['artifacts'].append(f'/{DEFAULT_BUILD_SCRIPT}')
-
-        if not self.config.include_path(DEFAULT_CONFIG_FILE):
-            build_data['artifacts'].append(f'/{DEFAULT_CONFIG_FILE}')
+                license_file = normalize_relative_path(license_file)
+                force_include[os.path.join(self.root, license_file)] = license_file
 
         return build_data
 
     @classmethod
-    def get_config_class(cls):
+    def get_config_class(cls) -> type[SdistBuilderConfig]:
         return SdistBuilderConfig
