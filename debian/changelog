@@ -1,3 +1,9 @@
+hatchling (1.12.2-1pexip1) pexip; urgency=medium
+
+  * New upstrema release
+
+ -- Huw Jones <huw@pexip.com>  Thu, 16 Mar 2023 16:58:24 +0000
+
 hatchling (1.12.2-1) unstable; urgency=medium
 
   * New upstream release.
