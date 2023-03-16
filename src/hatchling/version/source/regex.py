@@ -1,45 +1,28 @@
-import os
-import re
-
-from .plugin.interface import VersionSourceInterface
-
-DEFAULT_PATTERN = r'(?i)^(__version__|VERSION) *= *([\'"])v?(?P<version>.+?)\2'
+from hatchling.version.core import VersionFile
+from hatchling.version.source.plugin.interface import VersionSourceInterface
 
 
 class RegexSource(VersionSourceInterface):
     PLUGIN_NAME = 'regex'
 
-    def get_version_data(self):
-        relative_path = self.config.get('path')
+    def get_version_data(self) -> dict:
+        relative_path = self.config.get('path', '')
         if not relative_path:
-            raise ValueError('option `path` must be specified')
+            message = 'option `path` must be specified'
+            raise ValueError(message)
         elif not isinstance(relative_path, str):
-            raise TypeError('option `path` must be a string')
+            message = 'option `path` must be a string'
+            raise TypeError(message)
 
-        path = os.path.normpath(os.path.join(self.root, relative_path))
-        if not os.path.isfile(path):
-            raise OSError(f'file does not exist: {relative_path}')
-
-        pattern = self.config.get('pattern') or DEFAULT_PATTERN
+        pattern = self.config.get('pattern', '')
         if not isinstance(pattern, str):
-            raise TypeError('option `pattern` must be a string')
+            message = 'option `pattern` must be a string'
+            raise TypeError(message)
 
-        with open(path, 'r', encoding='utf-8') as f:
-            contents = f.read()
+        version_file = VersionFile(self.root, relative_path)
+        version = version_file.read(pattern)
 
-        match = re.search(pattern, contents, flags=re.MULTILINE)
-        if not match:
-            raise ValueError(f'unable to parse the version from the file: {relative_path}')
+        return {'version': version, 'version_file': version_file}
 
-        groups = match.groupdict()
-        if 'version' not in groups:
-            raise ValueError('no group named `version` was defined in the pattern')
-
-        return {'version': groups['version'], 'file_contents': contents, 'version_location': match.span('version')}
-
-    def set_version(self, version, version_data):
-        file_contents = version_data['file_contents']
-        start, end = version_data['version_location']
-
-        with open(self.config['path'], 'w', encoding='utf-8') as f:
-            f.write(f'{file_contents[:start]}{version}{file_contents[end:]}')
+    def set_version(self, version: str, version_data: dict) -> None:
+        version_data['version_file'].set_version(version)

@@ -6,10 +6,9 @@ from io import StringIO
 
 import httpx
 
-VERSION = '3.15'
-
-LICENSES_URL = f'https://raw.githubusercontent.com/spdx/license-list-data/v{VERSION}/json/licenses.json'
-EXCEPTIONS_URL = f'https://raw.githubusercontent.com/spdx/license-list-data/v{VERSION}/json/exceptions.json'
+LATEST_API = 'https://api.github.com/repos/spdx/license-list-data/releases/latest'
+LICENSES_URL = 'https://raw.githubusercontent.com/spdx/license-list-data/v{}/json/licenses.json'
+EXCEPTIONS_URL = 'https://raw.githubusercontent.com/spdx/license-list-data/v{}/json/exceptions.json'
 
 
 def download_data(url):
@@ -22,33 +21,42 @@ def download_data(url):
             continue
         else:
             return json.loads(response.content.decode('utf-8'))
-    else:
-        raise Exception('Download failed')
+
+    message = 'Download failed'
+    raise Exception(message)
 
 
 def main():
+    latest_version = download_data(LATEST_API)['tag_name'][1:]
+
     licenses = {}
-    for license_data in download_data(LICENSES_URL)['licenses']:
+    for license_data in download_data(LICENSES_URL.format(latest_version))['licenses']:
         license_id = license_data['licenseId']
         deprecated = license_data['isDeprecatedLicenseId']
         licenses[license_id.lower()] = {'id': license_id, 'deprecated': deprecated}
 
     exceptions = {}
-    for exception_data in download_data(EXCEPTIONS_URL)['exceptions']:
+    for exception_data in download_data(EXCEPTIONS_URL.format(latest_version))['exceptions']:
         exception_id = exception_data['licenseExceptionId']
         deprecated = exception_data['isDeprecatedLicenseId']
         exceptions[exception_id.lower()] = {'id': exception_id, 'deprecated': deprecated}
 
     project_root = pathlib.Path(__file__).resolve().parent.parent
-    data_file = project_root / 'hatchling' / 'licenses' / 'supported.py'
+    data_file = project_root / 'src' / 'hatchling' / 'licenses' / 'supported.py'
 
     with closing(StringIO()) as file_contents:
-        file_contents.write(f'VERSION = {VERSION!r}\n\nLICENSES = {{\n')
+        file_contents.write(
+            f"""\
+from __future__ import annotations
+
+VERSION = {latest_version!r}\n\nLICENSES: dict[str, dict[str, str | bool]] = {{
+"""
+        )
 
         for normalized_name, data in sorted(licenses.items()):
             file_contents.write(f'    {normalized_name!r}: {data!r},\n')
 
-        file_contents.write('}\n\nEXCEPTIONS = {\n')
+        file_contents.write('}\n\nEXCEPTIONS: dict[str, dict[str, str | bool]] = {\n')
 
         for normalized_name, data in sorted(exceptions.items()):
             file_contents.write(f'    {normalized_name!r}: {data!r},\n')

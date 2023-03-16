@@ -1,7 +1,14 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Callable
+
+if TYPE_CHECKING:
+    from hatchling.metadata.core import ProjectMetadata
+
 DEFAULT_METADATA_VERSION = '2.1'
 
 
-def get_core_metadata_constructors():
+def get_core_metadata_constructors() -> dict[str, Callable]:
     """
     https://packaging.python.org/specifications/core-metadata/
     """
@@ -13,12 +20,12 @@ def get_core_metadata_constructors():
     }
 
 
-def construct_metadata_file_1_2(metadata, extra_dependencies=()):
+def construct_metadata_file_1_2(metadata: ProjectMetadata, extra_dependencies: tuple[str] | None = None) -> str:
     """
     https://peps.python.org/pep-0345/
     """
     metadata_file = 'Metadata-Version: 1.2\n'
-    metadata_file += f'Name: {metadata.core.name}\n'
+    metadata_file += f'Name: {metadata.core.raw_name}\n'
     metadata_file += f'Version: {metadata.version}\n'
 
     if metadata.core.description:
@@ -72,12 +79,12 @@ def construct_metadata_file_1_2(metadata, extra_dependencies=()):
     return metadata_file
 
 
-def construct_metadata_file_2_1(metadata, extra_dependencies=()):
+def construct_metadata_file_2_1(metadata: ProjectMetadata, extra_dependencies: tuple[str] | None = None) -> str:
     """
     https://peps.python.org/pep-0566/
     """
     metadata_file = 'Metadata-Version: 2.1\n'
-    metadata_file += f'Name: {metadata.core.name}\n'
+    metadata_file += f'Name: {metadata.core.raw_name}\n'
     metadata_file += f'Version: {metadata.version}\n'
 
     if metadata.core.description:
@@ -110,6 +117,13 @@ def construct_metadata_file_2_1(metadata, extra_dependencies=()):
             else:
                 metadata_file += f'{indent}{line}\n'
 
+    if metadata.core.license_expression:
+        metadata_file += f'License-Expression: {metadata.core.license_expression}\n'
+
+    if metadata.core.license_files:
+        for license_file in metadata.core.license_files:
+            metadata_file += f'License-File: {license_file}\n'
+
     if metadata.core.keywords:
         metadata_file += f"Keywords: {','.join(metadata.core.keywords)}\n"
 
@@ -134,6 +148,8 @@ def construct_metadata_file_2_1(metadata, extra_dependencies=()):
             for dependency in dependencies:
                 if ';' in dependency:
                     metadata_file += f'Requires-Dist: {dependency} and extra == {option!r}\n'
+                elif '@ ' in dependency:
+                    metadata_file += f'Requires-Dist: {dependency} ; extra == {option!r}\n'
                 else:
                     metadata_file += f'Requires-Dist: {dependency}; extra == {option!r}\n'
 
@@ -144,12 +160,12 @@ def construct_metadata_file_2_1(metadata, extra_dependencies=()):
     return metadata_file
 
 
-def construct_metadata_file_2_2(metadata, extra_dependencies=()):
+def construct_metadata_file_2_2(metadata: ProjectMetadata, extra_dependencies: tuple[str] | None = None) -> str:
     """
     https://peps.python.org/pep-0643/
     """
     metadata_file = 'Metadata-Version: 2.2\n'
-    metadata_file += f'Name: {metadata.core.name}\n'
+    metadata_file += f'Name: {metadata.core.raw_name}\n'
     metadata_file += f'Version: {metadata.version}\n'
 
     if metadata.core.description:
@@ -182,6 +198,13 @@ def construct_metadata_file_2_2(metadata, extra_dependencies=()):
             else:
                 metadata_file += f'{indent}{line}\n'
 
+    if metadata.core.license_expression:
+        metadata_file += f'License-Expression: {metadata.core.license_expression}\n'
+
+    if metadata.core.license_files:
+        for license_file in metadata.core.license_files:
+            metadata_file += f'License-File: {license_file}\n'
+
     if metadata.core.keywords:
         metadata_file += f"Keywords: {','.join(metadata.core.keywords)}\n"
 
@@ -206,6 +229,8 @@ def construct_metadata_file_2_2(metadata, extra_dependencies=()):
             for dependency in dependencies:
                 if ';' in dependency:
                     metadata_file += f'Requires-Dist: {dependency} and extra == {option!r}\n'
+                elif '@ ' in dependency:
+                    metadata_file += f'Requires-Dist: {dependency} ; extra == {option!r}\n'
                 else:
                     metadata_file += f'Requires-Dist: {dependency}; extra == {option!r}\n'
 
@@ -216,12 +241,12 @@ def construct_metadata_file_2_2(metadata, extra_dependencies=()):
     return metadata_file
 
 
-def construct_metadata_file_2_3(metadata, extra_dependencies=()):
+def construct_metadata_file_2_3(metadata: ProjectMetadata, extra_dependencies: tuple[str] | None = None) -> str:
     """
     https://peps.python.org/pep-0639/
     """
     metadata_file = 'Metadata-Version: 2.3\n'
-    metadata_file += f'Name: {metadata.core.name}\n'
+    metadata_file += f'Name: {metadata.core.raw_name}\n'
     metadata_file += f'Version: {metadata.version}\n'
 
     if metadata.core.description:
@@ -274,6 +299,8 @@ def construct_metadata_file_2_3(metadata, extra_dependencies=()):
             for dependency in dependencies:
                 if ';' in dependency:
                     metadata_file += f'Requires-Dist: {dependency} and extra == {option!r}\n'
+                elif '@ ' in dependency:
+                    metadata_file += f'Requires-Dist: {dependency} ; extra == {option!r}\n'
                 else:
                     metadata_file += f'Requires-Dist: {dependency}; extra == {option!r}\n'
 

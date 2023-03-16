@@ -1,16 +1,28 @@
+from __future__ import annotations
+
 import argparse
+from typing import Any
 
 
-def build_impl(called_by_app, directory, targets, hooks_only, no_hooks, clean, clean_hooks_after, clean_only):
+def build_impl(
+    *,
+    called_by_app: bool,
+    directory: str,
+    targets: list[str],
+    hooks_only: bool,
+    no_hooks: bool,
+    clean: bool,
+    clean_hooks_after: bool,
+    clean_only: bool,
+) -> None:
     import os
-    from collections import OrderedDict
 
-    from ...bridge.app import get_application
-    from ...builders.constants import BuildEnvVars
-    from ...metadata.core import ProjectMetadata
-    from ...plugin.manager import PluginManager
+    from hatchling.bridge.app import get_application
+    from hatchling.builders.constants import BuildEnvVars
+    from hatchling.metadata.core import ProjectMetadata
+    from hatchling.plugin.manager import PluginManager
 
-    app = get_application(called_by_app)
+    app = get_application(called_by_app=called_by_app)
 
     if hooks_only and no_hooks:
         app.abort('Cannot use both --hooks-only and --no-hooks together')
@@ -19,18 +31,17 @@ def build_impl(called_by_app, directory, targets, hooks_only, no_hooks, clean, c
     plugin_manager = PluginManager()
     metadata = ProjectMetadata(root, plugin_manager)
 
-    target_data = OrderedDict()
+    target_data: dict[str, Any] = {}
     if targets:
         for data in targets:
             target_name, _, version_data = data.partition(':')
             versions = version_data.split(',') if version_data else []
             target_data.setdefault(target_name, []).extend(versions)
     else:  # no cov
-        targets = metadata.hatch.build_targets or ['sdist', 'wheel']
-        for target_name in targets:
-            target_data[target_name] = []
+        target_data['sdist'] = []
+        target_data['wheel'] = []
 
-    builders = OrderedDict()
+    builders = {}
     unknown_targets = []
     for target_name in target_data:
         builder_class = plugin_manager.builder.get(target_name)
@@ -75,14 +86,10 @@ def build_impl(called_by_app, directory, targets, hooks_only, no_hooks, clean, c
                 app.display_info(artifact)
 
 
-def build_command(subparsers, defaults):
+def build_command(subparsers: argparse._SubParsersAction, defaults: Any) -> None:
     parser = subparsers.add_parser('build')
     parser.add_argument(
-        '-d',
-        '--directory',
-        dest='directory',
-        help='The directory in which to build artifacts',
-        **defaults
+        '-d', '--directory', dest='directory', help='The directory in which to build artifacts', **defaults
     )
     parser.add_argument(
         '-t',
@@ -90,7 +97,7 @@ def build_command(subparsers, defaults):
         dest='targets',
         action='append',
         help='Comma-separated list of targets to build, overriding project defaults',
-        **defaults
+        **defaults,
     )
     parser.add_argument('--hooks-only', dest='hooks_only', action='store_true', default=None)
     parser.add_argument('--no-hooks', dest='no_hooks', action='store_true', default=None)
