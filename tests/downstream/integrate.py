@@ -31,7 +31,7 @@ def handle_remove_readonly(func, path, exc):  # no cov
 
 class EnvVars(dict):
     def __init__(self, env_vars=None, ignore=None):
-        super(EnvVars, self).__init__(os.environ)
+        super().__init__(os.environ)
         self.old_env = dict(self)
 
         if env_vars is not None:
@@ -78,6 +78,31 @@ def temp_dir():
         shutil.rmtree(d, ignore_errors=False, onerror=handle_remove_readonly)
 
 
+def get_venv_exe_dir(venv_dir):
+    exe_dir = os.path.join(venv_dir, 'Scripts' if ON_WINDOWS else 'bin')
+    if os.path.isdir(exe_dir):
+        return exe_dir
+    # PyPy
+    elif ON_WINDOWS:
+        exe_dir = os.path.join(venv_dir, 'bin')
+        if os.path.isdir(exe_dir):
+            return exe_dir
+        else:
+            message = f'Unable to locate executables directory within: {venv_dir}'
+            raise OSError(message)
+    # Debian
+    elif os.path.isdir(os.path.join(venv_dir, 'local')):
+        exe_dir = os.path.join(venv_dir, 'local', 'bin')
+        if os.path.isdir(exe_dir):
+            return exe_dir
+        else:
+            message = f'Unable to locate executables directory within: {venv_dir}'
+            raise OSError(message)
+    else:
+        message = f'Unable to locate executables directory within: {venv_dir}'
+        raise OSError(message)
+
+
 def main():
     original_backend_path = os.path.dirname(os.path.dirname(HERE))
     with temp_dir() as links_dir, temp_dir() as build_dir:
@@ -87,7 +112,7 @@ def main():
 
         # Increment the minor version
         version_file = os.path.join(backend_path, 'src', 'hatchling', '__about__.py')
-        with open(version_file, 'r') as f:
+        with open(version_file) as f:
             lines = f.readlines()
 
         for i, line in enumerate(lines):
@@ -98,7 +123,8 @@ def main():
                 lines[i] = line.replace(version, '.'.join(version_parts))
                 break
         else:
-            raise ValueError('No version found')
+            message = 'No version found'
+            raise ValueError(message)
 
         with open(version_file, 'w') as f:
             f.writelines(lines)
@@ -120,10 +146,7 @@ def main():
             ]
         )
 
-        constraints = [
-            # Cap the version of setuptools until it supports PEP 639
-            'setuptools<61.0.0',
-        ]
+        constraints = []
         constraints_file = os.path.join(build_dir, 'constraints.txt')
         with open(constraints_file, 'w') as f:
             f.write('\n'.join(constraints))
@@ -139,14 +162,14 @@ def main():
 
             # Not yet ported
             if os.path.isfile(potential_project_file):
-                with open(potential_project_file, 'r') as f:
+                with open(potential_project_file) as f:
                     project_config.update(tomli.loads(f.read()))
 
                 if not python_version_supported(project_config):
                     print('--> Unsupported version of Python, skipping')
                     continue
 
-            with open(os.path.join(project_dir, 'data.json'), 'r') as f:
+            with open(os.path.join(project_dir, 'data.json')) as f:
                 test_data = json.loads(f.read())
 
             with temp_dir() as d:
@@ -174,7 +197,7 @@ def main():
                     if not os.path.isfile(project_file):
                         sys.exit('--> Missing file: pyproject.toml')
 
-                    with open(project_file, 'r') as f:
+                    with open(project_file) as f:
                         project_config.update(tomli.loads(f.read()))
 
                     for requirement in project_config.get('build-system', {}).get('requires', []):
@@ -198,9 +221,7 @@ def main():
 
                 env_vars = dict(test_data.get('env_vars', {}))
                 env_vars['VIRTUAL_ENV'] = venv_dir
-                env_vars[
-                    'PATH'
-                ] = f'{os.path.join(venv_dir, "Scripts" if ON_WINDOWS else "bin")}{os.pathsep}{os.environ["PATH"]}'
+                env_vars['PATH'] = f'{get_venv_exe_dir(venv_dir)}{os.pathsep}{os.environ["PATH"]}'
                 env_vars['PIP_CONSTRAINT'] = constraints_file
                 with EnvVars(env_vars, ignore=('__PYVENV_LAUNCHER__', 'PYTHONHOME')):
                     print('--> Installing project')
