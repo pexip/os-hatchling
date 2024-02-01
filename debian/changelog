@@ -1,3 +1,9 @@
+hatchling (1.12.2-1+pexip24u4) pexip-bookworm; urgency=medium
+
+  * New versioning scheme
+
+ -- Mark Hymers <mark.hymers@pexip.com>  Thu, 01 Feb 2024 16:00:52 +0000
+
 hatchling (1.12.2-1pexip3) pexip-bookworm; urgency=medium
 
   * Bookworm build for product distribution
